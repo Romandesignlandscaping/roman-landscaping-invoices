@@ -86,8 +86,8 @@ function defaultState() {
       taxRate: 8.375,
       companyName: 'ROMAN DESIGN & LANDSCAPING INC.',
       ownerName: 'Roman Cuateco',
-      companyAddress: 'P.O Box 767 Elmsford NY 10523',
-      companyEmail: 'Cuatecot@yahoo.com',
+      companyAddress: '516 Tarrytown Road, White Plains, NY 10607',
+      companyEmail: 'RomanD.Landscaping@gmail.com',
       phone: '914-467-9927',
       paymentNote: 'Please send payment to P.O.box: P.O. Box 767 Elmsford NY 10523',
       anthropicApiKey: '',
@@ -128,6 +128,8 @@ function normalizeState(target) {
   target.appraisals = Array.isArray(target.appraisals) ? target.appraisals : [];
   target.invoices = target.invoices && typeof target.invoices === 'object' ? target.invoices : {};
   target.settings = deepMerge(defaultState().settings, target.settings || {});
+  if (String(target.settings.companyAddress || '').trim() === 'P.O Box 767 Elmsford NY 10523') target.settings.companyAddress = '516 Tarrytown Road, White Plains, NY 10607';
+  if (String(target.settings.companyEmail || '').trim().toLowerCase() === 'cuatecot@yahoo.com') target.settings.companyEmail = 'RomanD.Landscaping@gmail.com';
   target.vendors.forEach(v => { if (!v.prefix) v.prefix = derivePrefix(v); });
   Object.values(target.invoices).flat().forEach(inv => {
     inv.items = Array.isArray(inv.items) && inv.items.length ? inv.items : [{ name: inv.description || 'Invoice total', amount: Number(inv.amount || 0) }];
@@ -744,9 +746,9 @@ function renderSettingsPage() {
       </div>
       <div class="section-card">
         <h3>Anthropic OCR</h3>
-        <div class="field"><label>API Key (optional if set in Netlify env)</label><input id="settingsAnthropicApiKey" type="password" value="${escapeHtml(state.settings.anthropicApiKey)}" /></div>
+        <div class="field"><label>API Key (optional if set in Cloudflare secret)</label><input id="settingsAnthropicApiKey" type="password" value="${escapeHtml(state.settings.anthropicApiKey)}" /></div>
         <div class="field"><label>Model</label><input id="settingsAnthropicModel" type="text" value="${escapeHtml(state.settings.anthropicModel)}" /></div>
-        <div class="helper">Best practice: set <span class="code-pill">ANTHROPIC_API_KEY</span> as a Netlify environment variable so the browser never sees the key. The function will fall back to this field only if the env variable is not set.</div>
+        <div class="helper">Best practice: set <span class="code-pill">ANTHROPIC_API_KEY</span> as a Cloudflare secret so the browser never sees the key. The function will fall back to this field only if the secret is not set.</div>
       </div>
       <div class="section-card">
         <h3>Promo image for PDF footer</h3>
@@ -1169,141 +1171,212 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
   const vendor = findVendor(invoice.vendorId) || { name: invoice.vendorName || '', property: invoice.property || '' };
   const localDoc = doc || new jsPDF({ unit: 'pt', format: 'letter' });
   if (addPage) localDoc.addPage();
+
   const pageWidth = localDoc.internal.pageSize.getWidth();
   const pageHeight = localDoc.internal.pageSize.getHeight();
-  const margin = 28;
+  const margin = 26;
   const contentWidth = pageWidth - margin * 2;
+
   const treeLogo = await loadImageAsDataUrl('/assets/logo-tree.png');
   const promo = state.settings.promoImage?.startsWith('data:') ? state.settings.promoImage : await loadImageAsDataUrl(state.settings.promoImage || '/assets/promo-default.png');
-  const firstPageNumber = localDoc.internal.getCurrentPageInfo().pageNumber;
-
-  let y = 24;
-  localDoc.setFillColor(255, 255, 255);
-  localDoc.addImage(treeLogo, 'PNG', pageWidth / 2 - 65, y, 130, 92, undefined, 'FAST');
-  y += 95;
-  localDoc.setFont('times', 'bold');
-  localDoc.setFontSize(18);
-  localDoc.text(state.settings.companyName || 'ROMAN DESIGN & LANDSCAPING INC.', pageWidth / 2, y, { align: 'center' });
-  y += 18;
-  localDoc.setFont('helvetica', 'bold');
-  localDoc.setFontSize(13);
-  localDoc.text(state.settings.phone || '', pageWidth / 2, y, { align: 'center' });
-  y += 28;
-
-  const colWidths = [contentWidth * 0.28, contentWidth * 0.44, contentWidth * 0.28];
-  const rowHeight = 20;
-  const rowY = y;
-  localDoc.setDrawColor(40, 40, 40);
-  localDoc.setLineWidth(1);
-  let x = margin;
-  const infoCells = [state.settings.ownerName || '', state.settings.companyAddress || '', state.settings.companyEmail || ''];
-  infoCells.forEach((cell, index) => {
-    const width = colWidths[index];
-    localDoc.rect(x, rowY, width, rowHeight);
-    localDoc.setFont('helvetica', 'bold');
-    localDoc.setFontSize(11);
-    localDoc.text(cell, x + 8, rowY + 14);
-    x += width;
-  });
-  y += rowHeight + 28;
-
-  localDoc.setTextColor(0, 104, 84);
-  localDoc.setFont('helvetica', 'bold');
-  localDoc.setFontSize(13);
-  localDoc.text(`DATE: ${invoice.dateSent || ''}`, margin + 120, y);
-  localDoc.text(`DESCRIPTION: ${invoice.description || ''} ${invoice.property || vendor.property || ''}`.trim(), margin + 270, y);
-  y += 12;
-  localDoc.setDrawColor(48, 48, 48);
-  localDoc.line(margin + 44, y, pageWidth - margin - 44, y);
-  y += 16;
 
   const bodyItems = invoice.items?.length ? invoice.items : [{ name: invoice.description || 'Invoice total', amount: invoice.amount }];
-  localDoc.setTextColor(0, 0, 0);
-  localDoc.autoTable({
-    startY: y,
-    body: bodyItems.map((item, index) => [
-      `${index + 1}.`,
-      item.name,
-      money(item.amount)
-    ]),
-    theme: 'plain',
-    margin: { left: margin + 18, right: margin + 20 },
-    styles: { font: 'helvetica', fontSize: 11, textColor: 20, cellPadding: { top: 3, right: 2, bottom: 3, left: 2 }, lineWidth: 0 },
-    columnStyles: {
-      0: { cellWidth: 25, fontStyle: 'bold' },
-      1: { cellWidth: 385 },
-      2: { cellWidth: 110, halign: 'right' }
-    },
-    didDrawPage: () => {
-      const currentPageNumber = localDoc.internal.getCurrentPageInfo().pageNumber;
-      if (currentPageNumber !== firstPageNumber) {
-        localDoc.setFont('helvetica', 'bold');
-        localDoc.setFontSize(10);
-        localDoc.text(`${state.settings.companyName || 'ROMAN DESIGN & LANDSCAPING INC.'} — ${invoice.invoiceNumber}`, margin, 24);
-      }
-    }
+  const subtotal = invoiceItemsTotal(bodyItems);
+  const taxRate = Number(state.settings.taxRate || 0);
+  const tax = subtotal * (taxRate / 100);
+  const total = subtotal + tax;
+
+  const headerAddress = state.settings.companyAddress || '516 Tarrytown Road, White Plains, NY 10607';
+  const headerEmail = state.settings.companyEmail || 'RomanD.Landscaping@gmail.com';
+  const headerOwner = state.settings.ownerName || 'Roman Cuateco';
+  const displayDate = formatInvoiceDisplayDate(invoice.dateSent);
+  const descriptionText = `${invoice.description || 'Invoice'} ${invoice.property || vendor.property || ''}`.trim();
+
+  let y = drawInvoiceHeader(localDoc, {
+    treeLogo,
+    pageWidth,
+    margin,
+    contentWidth,
+    owner: headerOwner,
+    address: headerAddress,
+    email: headerEmail,
+    companyName: state.settings.companyName || 'ROMAN DESIGN & LANDSCAPING INC.',
+    phone: state.settings.phone || '',
+    dateText: `DATE: ${displayDate}`,
+    descriptionText: `DESCRIPTION: ${descriptionText}`
   });
 
-  let endY = localDoc.lastAutoTable.finalY + 8;
-  const subtotal = invoiceItemsTotal(bodyItems);
-  const tax = subtotal * (Number(state.settings.taxRate || 0) / 100);
-  const total = subtotal + tax;
-  const totalsHeight = 48;
-  const footerMin = 140;
-  const remainingBeforeFooter = pageHeight - endY - margin;
+  localDoc.setTextColor(0, 0, 0);
+  localDoc.setFont('times', 'bold');
+  localDoc.setFontSize(11);
+  localDoc.text('SERVICES:', margin + 42, y);
+  y += 20;
 
-  if (remainingBeforeFooter < totalsHeight + footerMin) {
-    localDoc.addPage();
-    endY = 44;
+  for (let index = 0; index < bodyItems.length; index++) {
+    const item = bodyItems[index];
+    const rowHeight = estimateInvoiceRowHeight(localDoc, item.name, pageWidth, margin);
+    if (y + rowHeight > pageHeight - margin - 140) {
+      localDoc.addPage();
+      y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
+    }
+    y = drawInvoiceItemRow(localDoc, item, index, { y, pageWidth, margin });
   }
+
+  const totalsBlockHeight = state.settings.paymentNote ? 58 : 36;
+  if (y + totalsBlockHeight > pageHeight - margin - 180) {
+    localDoc.addPage();
+    y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
+  }
+
+  y += 4;
+  localDoc.setDrawColor(70, 70, 70);
+  localDoc.setLineWidth(1);
+  localDoc.line(margin + 44, y, pageWidth - margin - 44, y);
+  y += 18;
 
   localDoc.setFont('times', 'bold');
-  localDoc.setFontSize(13);
-  localDoc.text(`Total (${state.settings.taxRate}% Tax applicable)`, pageWidth / 2, endY, { align: 'center' });
-  endY += 10;
-  localDoc.line(margin + 44, endY, pageWidth - margin - 44, endY);
-  endY += 16;
+  localDoc.setFontSize(12);
+  localDoc.text(`Total (${taxRate}% Tax applicable)`, pageWidth / 2, y, { align: 'center' });
+  y += 18;
+
   localDoc.setFont('helvetica', 'normal');
   localDoc.setFontSize(10.5);
-  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin - 180, endY);
-  localDoc.text(`Tax: ${money(tax)}`, pageWidth - margin - 94, endY);
+  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin - 182, y);
+  localDoc.text(`Tax: ${money(tax)}`, pageWidth - margin - 90, y);
   localDoc.setFont('helvetica', 'bold');
-  localDoc.text(`Total: ${money(total)}`, pageWidth - margin, endY, { align: 'right' });
-  endY += 12;
+  localDoc.text(`Total: ${money(total)}`, pageWidth - margin, y, { align: 'right' });
+  y += 16;
 
   if (state.settings.paymentNote) {
-    localDoc.setTextColor(210, 20, 20);
+    localDoc.setTextColor(220, 30, 30);
+    localDoc.setFont('helvetica', 'bold');
     localDoc.setFontSize(10);
-    localDoc.text(`!!! ${state.settings.paymentNote} !!!`, pageWidth / 2, endY + 12, { align: 'center' });
+    localDoc.text(`!!! ${state.settings.paymentNote} !!!`, pageWidth / 2, y, { align: 'center', maxWidth: contentWidth - 50 });
     localDoc.setTextColor(0, 0, 0);
-    endY += 16;
+    y += 20;
   }
 
-  const footerAvailableHeight = pageHeight - endY - margin;
   const promoProps = localDoc.getImageProperties(promo);
-  const maxWidth = contentWidth - 120;
-  const maxHeight = Math.max(110, footerAvailableHeight - 6);
   const ratio = promoProps.width / promoProps.height;
-  let promoWidth = maxWidth;
+  const maxPromoWidth = Math.min(contentWidth - 84, 470);
+  let promoWidth = maxPromoWidth;
   let promoHeight = promoWidth / ratio;
-  if (promoHeight > maxHeight) {
-    promoHeight = maxHeight;
-    promoWidth = promoHeight * ratio;
-  }
-  if (promoWidth > maxWidth) {
-    promoWidth = maxWidth;
-    promoHeight = promoWidth / ratio;
-  }
-  if (promoHeight < 100) {
+  const availableHeight = pageHeight - y - margin;
+
+  if (availableHeight < 190) {
     localDoc.addPage();
-    endY = 50;
-    promoWidth = Math.min(maxWidth, 470);
-    promoHeight = promoWidth / ratio;
+    y = 40;
   }
-  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, endY + 12, promoWidth, promoHeight, undefined, 'FAST');
+
+  const finalAvailableHeight = pageHeight - y - margin;
+  if (promoHeight > finalAvailableHeight) {
+    promoHeight = Math.max(160, finalAvailableHeight);
+    promoWidth = promoHeight * ratio;
+    if (promoWidth > maxPromoWidth) {
+      promoWidth = maxPromoWidth;
+      promoHeight = promoWidth / ratio;
+    }
+  }
+
+  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, y + 6, promoWidth, promoHeight, undefined, 'FAST');
 
   if (download) localDoc.save(`${sanitizeFileName((invoice.invoiceNumber || 'invoice') + '-' + (vendor.name || 'client'))}.pdf`);
   return localDoc;
+}
+
+function drawInvoiceHeader(doc, { treeLogo, pageWidth, margin, contentWidth, owner, address, email, companyName, phone, dateText, descriptionText }) {
+  const logoWidth = 118;
+  const logoHeight = 83;
+  let y = 18;
+  doc.addImage(treeLogo, 'PNG', pageWidth / 2 - logoWidth / 2, y, logoWidth, logoHeight, undefined, 'FAST');
+  y += 100;
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('times', 'bold');
+  doc.setFontSize(18);
+  doc.text(companyName, pageWidth / 2, y, { align: 'center' });
+  y += 17;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(phone, pageWidth / 2, y, { align: 'center' });
+  y += 28;
+
+  const rowHeight = 20;
+  const colWidths = [contentWidth * 0.28, contentWidth * 0.44, contentWidth * 0.28];
+  let x = margin;
+  doc.setDrawColor(40, 40, 40);
+  doc.setLineWidth(1);
+  [owner, address, email].forEach((cell, index) => {
+    const width = colWidths[index];
+    doc.rect(x, y, width, rowHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text(String(cell || ''), x + 8, y + 13);
+    x += width;
+  });
+  y += rowHeight + 20;
+
+  doc.setTextColor(0, 104, 84);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12.5);
+  const dateCenter = margin + 155;
+  const descCenter = pageWidth - margin - 170;
+  const dateLines = doc.splitTextToSize(dateText, 170);
+  const descLines = doc.splitTextToSize(descriptionText, 300);
+  doc.text(dateLines, dateCenter, y, { align: 'center' });
+  doc.text(descLines.slice(0, 2), descCenter, y, { align: 'center' });
+  y += Math.max(dateLines.length, Math.min(descLines.length, 2)) * 13;
+  doc.setDrawColor(60, 60, 60);
+  doc.line(margin + 44, y, pageWidth - margin - 44, y);
+  y += 20;
+  return y;
+}
+
+function drawInvoiceContinuationHeader(doc, { pageWidth, margin, invoiceNumber, vendorName }) {
+  let y = 28;
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`Invoice ${invoiceNumber || ''}${vendorName ? ` — ${vendorName}` : ''} (continued)`, margin, y);
+  y += 8;
+  doc.setDrawColor(70, 70, 70);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 18;
+  return y;
+}
+
+function estimateInvoiceRowHeight(doc, text, pageWidth, margin) {
+  const lines = doc.splitTextToSize(String(text || ''), pageWidth - margin - 120 - (margin + 52));
+  return Math.max(18, lines.length * 13 + 4);
+}
+
+function drawInvoiceItemRow(doc, item, index, { y, pageWidth, margin }) {
+  const numberX = margin + 18;
+  const descriptionX = margin + 46;
+  const amountX = pageWidth - margin - 14;
+  const descriptionWidth = amountX - descriptionX - 78;
+  const lines = doc.splitTextToSize(String(item.name || ''), descriptionWidth);
+  const rowHeight = Math.max(18, lines.length * 13 + 4);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.text(`${index + 1}.`, numberX, y + 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(lines, descriptionX, y + 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(money(item.amount), amountX, y + 10, { align: 'right' });
+
+  return y + rowHeight;
+}
+
+function formatInvoiceDisplayDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 }
 
 async function downloadFollowupPack(vendorId) {
