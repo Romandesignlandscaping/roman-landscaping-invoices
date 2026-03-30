@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roman-cloudflare-v1';
+const CACHE_NAME = 'roman-cloudflare-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -40,6 +40,19 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => caches.match(event.request) || caches.match('/index.html'))
+    );
+    return;
+  }
+
+  if (url.pathname.endsWith('/app.js') || url.pathname.endsWith('/styles.css')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
     );
     return;
   }
