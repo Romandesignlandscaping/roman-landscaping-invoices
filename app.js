@@ -1,7 +1,7 @@
 
 const { jsPDF } = window.jspdf;
 
-const STORAGE_KEY = 'roman-landscaping-rebuild-v2';
+const STORAGE_KEY = 'roman-landscaping-rebuild-v3';
 const DEFAULT_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyJWNDE0zM4_7zOoAZq5CO5C7GnQB8impRCkgI3fmjy7WZNFwumHKUj5eHh-x9hDkf5Bg/exec';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const TAB_META = {
