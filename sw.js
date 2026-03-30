@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roman-cloudflare-v3';
+const CACHE_NAME = 'roman-cloudflare-v1';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   '/assets/icon-192.png',
   '/assets/icon-512.png',
   '/assets/logo-tree.png',
+  '/assets/header-logo.png',
   '/assets/promo-default.png'
 ];
 
@@ -40,19 +41,6 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => caches.match(event.request) || caches.match('/index.html'))
-    );
-    return;
-  }
-
-  if (url.pathname.endsWith('/app.js') || url.pathname.endsWith('/styles.css')) {
-    event.respondWith(
-      fetch(event.request).then(response => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => caches.match(event.request))
     );
     return;
   }
