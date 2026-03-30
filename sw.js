@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roman-cloudflare-v2';
+const CACHE_NAME = 'roman-cloudflare-v3';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
