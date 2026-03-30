@@ -1,7 +1,7 @@
 
 const { jsPDF } = window.jspdf;
 
-const STORAGE_KEY = 'roman-landscaping-rebuild-v3';
+const STORAGE_KEY = 'roman-landscaping-rebuild-v2';
 const DEFAULT_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyJWNDE0zM4_7zOoAZq5CO5C7GnQB8impRCkgI3fmjy7WZNFwumHKUj5eHh-x9hDkf5Bg/exec';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const TAB_META = {
@@ -86,8 +86,8 @@ function defaultState() {
       taxRate: 8.375,
       companyName: 'ROMAN DESIGN & LANDSCAPING INC.',
       ownerName: 'Roman Cuateco',
-      companyAddress: '516 Tarrytown Road, White Plains, NY 10607',
-      companyEmail: 'RomanD.Landscaping@gmail.com',
+      companyAddress: 'P.O Box 767 Elmsford NY 10523',
+      companyEmail: 'Cuatecot@yahoo.com',
       phone: '914-467-9927',
       paymentNote: 'Please send payment to P.O.box: P.O. Box 767 Elmsford NY 10523',
       anthropicApiKey: '',
@@ -128,8 +128,6 @@ function normalizeState(target) {
   target.appraisals = Array.isArray(target.appraisals) ? target.appraisals : [];
   target.invoices = target.invoices && typeof target.invoices === 'object' ? target.invoices : {};
   target.settings = deepMerge(defaultState().settings, target.settings || {});
-  if (String(target.settings.companyAddress || '').trim() === 'P.O Box 767 Elmsford NY 10523') target.settings.companyAddress = '516 Tarrytown Road, White Plains, NY 10607';
-  if (String(target.settings.companyEmail || '').trim().toLowerCase() === 'cuatecot@yahoo.com') target.settings.companyEmail = 'RomanD.Landscaping@gmail.com';
   target.vendors.forEach(v => { if (!v.prefix) v.prefix = derivePrefix(v); });
   Object.values(target.invoices).flat().forEach(inv => {
     inv.items = Array.isArray(inv.items) && inv.items.length ? inv.items : [{ name: inv.description || 'Invoice total', amount: Number(inv.amount || 0) }];
@@ -746,9 +744,9 @@ function renderSettingsPage() {
       </div>
       <div class="section-card">
         <h3>Anthropic OCR</h3>
-        <div class="field"><label>API Key (optional if set in Cloudflare secret)</label><input id="settingsAnthropicApiKey" type="password" value="${escapeHtml(state.settings.anthropicApiKey)}" /></div>
+        <div class="field"><label>API Key (optional if set in Netlify env)</label><input id="settingsAnthropicApiKey" type="password" value="${escapeHtml(state.settings.anthropicApiKey)}" /></div>
         <div class="field"><label>Model</label><input id="settingsAnthropicModel" type="text" value="${escapeHtml(state.settings.anthropicModel)}" /></div>
-        <div class="helper">Best practice: set <span class="code-pill">ANTHROPIC_API_KEY</span> as a Cloudflare secret so the browser never sees the key. The function will fall back to this field only if the secret is not set.</div>
+        <div class="helper">Best practice: set <span class="code-pill">ANTHROPIC_API_KEY</span> as a Netlify environment variable so the browser never sees the key. The function will fall back to this field only if the env variable is not set.</div>
       </div>
       <div class="section-card">
         <h3>Promo image for PDF footer</h3>
@@ -1171,215 +1169,138 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
   const vendor = findVendor(invoice.vendorId) || { name: invoice.vendorName || '', property: invoice.property || '' };
   const localDoc = doc || new jsPDF({ unit: 'pt', format: 'letter' });
   if (addPage) localDoc.addPage();
-
   const pageWidth = localDoc.internal.pageSize.getWidth();
   const pageHeight = localDoc.internal.pageSize.getHeight();
-  const margin = 24;
+  const margin = 28;
   const contentWidth = pageWidth - margin * 2;
-
-  const treeLogo = await loadImageAsDataUrl('/assets/logo-tree.png');
+  const headerLogo = await loadImageAsDataUrl('/assets/header-logo.png');
   const promo = state.settings.promoImage?.startsWith('data:') ? state.settings.promoImage : await loadImageAsDataUrl(state.settings.promoImage || '/assets/promo-default.png');
+  const firstPageNumber = localDoc.internal.getCurrentPageInfo().pageNumber;
+
+  let headerAddress = state.settings.companyAddress || '516 Tarrytown Road, White Plains, NY 10607';
+  let headerEmail = state.settings.companyEmail || 'RomanD.Landscaping@gmail.com';
+  const headerOwner = state.settings.ownerName || 'Roman Cuateco';
+  if (/elmsford/i.test(headerAddress || '')) headerAddress = '516 Tarrytown Road, White Plains, NY 10607';
+  if (/yahoo\.com/i.test(headerEmail || '')) headerEmail = 'RomanD.Landscaping@gmail.com';
+  const displayDate = normalizePossibleDate(invoice.dateSent) || invoice.dateSent || '';
+  const descriptionText = `${invoice.description || ''} ${invoice.property || vendor.property || ''}`.trim();
+
+  let y = 20;
+  localDoc.addImage(headerLogo, 'PNG', pageWidth / 2 - 110, y, 220, 118, undefined, 'FAST');
+  y += 136;
+
+  const colWidths = [contentWidth * 0.28, contentWidth * 0.44, contentWidth * 0.28];
+  const rowHeight = 20;
+  const rowY = y;
+  localDoc.setDrawColor(40, 40, 40);
+  localDoc.setLineWidth(1);
+  let x = margin;
+  const infoCells = [headerOwner, headerAddress, headerEmail];
+  infoCells.forEach((cell, index) => {
+    const width = colWidths[index];
+    localDoc.rect(x, rowY, width, rowHeight);
+    localDoc.setFont('helvetica', 'bold');
+    localDoc.setFontSize(11);
+    localDoc.text(String(cell || ''), x + 8, rowY + 14);
+    x += width;
+  });
+  y += rowHeight + 28;
+
+  localDoc.setTextColor(0, 104, 84);
+  localDoc.setFont('helvetica', 'bold');
+  localDoc.setFontSize(13);
+  localDoc.text(`DATE: ${displayDate}`, margin + 120, y);
+  localDoc.text(`DESCRIPTION: ${descriptionText}`.trim(), margin + 270, y);
+  y += 12;
+  localDoc.setDrawColor(48, 48, 48);
+  localDoc.line(margin + 44, y, pageWidth - margin - 44, y);
+  y += 16;
 
   const bodyItems = invoice.items?.length ? invoice.items : [{ name: invoice.description || 'Invoice total', amount: invoice.amount }];
-  const subtotal = invoiceItemsTotal(bodyItems);
-  const taxRate = Number(state.settings.taxRate || 0);
-  const tax = subtotal * (taxRate / 100);
-  const total = subtotal + tax;
-
-  const headerAddress = state.settings.companyAddress || '516 Tarrytown Road, White Plains, NY 10607';
-  const headerEmail = state.settings.companyEmail || 'RomanD.Landscaping@gmail.com';
-  const headerOwner = state.settings.ownerName || 'Roman Cuateco';
-  const displayDate = formatInvoiceDisplayDate(invoice.dateSent);
-  const descBase = String(invoice.description || '').trim();
-  const propertyBase = String(invoice.property || vendor.property || '').trim();
-  const descriptionText = descBase && propertyBase && descBase.toLowerCase().includes(propertyBase.toLowerCase()) ? descBase : [descBase || 'Invoice', propertyBase].filter(Boolean).join(' ');
-
-  let y = drawInvoiceHeader(localDoc, {
-    treeLogo,
-    pageWidth,
-    margin,
-    contentWidth,
-    owner: headerOwner,
-    address: headerAddress,
-    email: headerEmail,
-    companyName: state.settings.companyName || 'ROMAN DESIGN & LANDSCAPING INC.',
-    phone: state.settings.phone || '',
-    dateText: `DATE: ${displayDate}`,
-    descriptionText: `DESCRIPTION: ${descriptionText}`
+  localDoc.setTextColor(0, 0, 0);
+  localDoc.autoTable({
+    startY: y,
+    body: bodyItems.map((item, index) => [
+      `${index + 1}.`,
+      item.name,
+      money(item.amount)
+    ]),
+    theme: 'plain',
+    margin: { left: margin + 18, right: margin + 20 },
+    styles: { font: 'helvetica', fontSize: 11, textColor: 20, cellPadding: { top: 3, right: 2, bottom: 3, left: 2 }, lineWidth: 0 },
+    columnStyles: {
+      0: { cellWidth: 25, fontStyle: 'bold' },
+      1: { cellWidth: 385 },
+      2: { cellWidth: 110, halign: 'right' }
+    },
+    didDrawPage: () => {
+      const currentPageNumber = localDoc.internal.getCurrentPageInfo().pageNumber;
+      if (currentPageNumber !== firstPageNumber) {
+        localDoc.setFont('helvetica', 'bold');
+        localDoc.setFontSize(10);
+        localDoc.text(`${state.settings.companyName || 'ROMAN DESIGN & LANDSCAPING INC.'} — ${invoice.invoiceNumber}`, margin, 24);
+      }
+    }
   });
 
-  localDoc.setTextColor(0, 0, 0);
-  localDoc.setFont('times', 'bold');
-  localDoc.setFontSize(11);
-  localDoc.text('SERVICES:', margin + 42, y);
-  y += 20;
+  let endY = localDoc.lastAutoTable.finalY + 8;
+  const subtotal = invoiceItemsTotal(bodyItems);
+  const tax = subtotal * (Number(state.settings.taxRate || 0) / 100);
+  const total = subtotal + tax;
+  const totalsHeight = 48;
+  const footerMin = 140;
+  const remainingBeforeFooter = pageHeight - endY - margin;
 
-  for (let index = 0; index < bodyItems.length; index++) {
-    const item = bodyItems[index];
-    const rowHeight = estimateInvoiceRowHeight(localDoc, item.name, pageWidth, margin);
-    if (y + rowHeight > pageHeight - margin - 220) {
-      localDoc.addPage();
-      y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
-    }
-    y = drawInvoiceItemRow(localDoc, item, index, { y, pageWidth, margin });
-  }
-
-  const totalsBlockHeight = state.settings.paymentNote ? 72 : 48;
-  if (y + totalsBlockHeight > pageHeight - margin - 200) {
+  if (remainingBeforeFooter < totalsHeight + footerMin) {
     localDoc.addPage();
-    y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
+    endY = 44;
   }
 
-  y += 2;
-  localDoc.setDrawColor(70, 70, 70);
-  localDoc.setLineWidth(1);
-  localDoc.line(margin + 44, y, pageWidth - margin - 44, y);
-  y += 18;
-
-  localDoc.setFont('times', 'bold');
-  localDoc.setFontSize(12.5);
-  localDoc.text(`Total (${taxRate}% Tax applicable)`, pageWidth / 2, y, { align: 'center' });
-  y += 18;
-
+  localDoc.line(margin + 44, endY, pageWidth - margin - 44, endY);
+  endY += 16;
   localDoc.setFont('helvetica', 'normal');
   localDoc.setFontSize(10.5);
-  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin - 205, y);
-  localDoc.text(`Tax: ${money(tax)}`, pageWidth - margin - 108, y);
+  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin, endY, { align: 'right' });
+  endY += 14;
+  localDoc.text(`Tax (${state.settings.taxRate}%): ${money(tax)}`, pageWidth - margin, endY, { align: 'right' });
+  endY += 14;
   localDoc.setFont('helvetica', 'bold');
-  localDoc.text(`Total: ${money(total)}`, pageWidth - margin, y, { align: 'right' });
-  y += 20;
+  localDoc.text(`Total: ${money(total)}`, pageWidth - margin, endY, { align: 'right' });
+  endY += 12;
 
   if (state.settings.paymentNote) {
-    localDoc.setTextColor(220, 30, 30);
-    localDoc.setFont('helvetica', 'bold');
+    localDoc.setTextColor(210, 20, 20);
     localDoc.setFontSize(10);
-    const noteText = `!!! ${state.settings.paymentNote} !!!`;
-    localDoc.text(noteText, pageWidth / 2, y, { align: 'center', maxWidth: contentWidth - 60 });
+    localDoc.text(`!!! ${state.settings.paymentNote} !!!`, pageWidth / 2, endY + 12, { align: 'center' });
     localDoc.setTextColor(0, 0, 0);
-    y += 24;
+    endY += 16;
   }
 
+  const footerAvailableHeight = pageHeight - endY - margin;
   const promoProps = localDoc.getImageProperties(promo);
+  const maxWidth = contentWidth - 120;
+  const maxHeight = Math.max(110, footerAvailableHeight - 6);
   const ratio = promoProps.width / promoProps.height;
-  const maxPromoWidth = Math.min(contentWidth - 96, 440);
-  let promoWidth = maxPromoWidth;
+  let promoWidth = maxWidth;
   let promoHeight = promoWidth / ratio;
-  let availableHeight = pageHeight - y - margin;
-
-  if (availableHeight < 220) {
-    localDoc.addPage();
-    y = 36;
-    availableHeight = pageHeight - y - margin;
-  }
-
-  if (promoHeight > availableHeight) {
-    promoHeight = availableHeight;
+  if (promoHeight > maxHeight) {
+    promoHeight = maxHeight;
     promoWidth = promoHeight * ratio;
-    if (promoWidth > maxPromoWidth) {
-      promoWidth = maxPromoWidth;
-      promoHeight = promoWidth / ratio;
-    }
   }
-
-  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, y + 4, promoWidth, promoHeight, undefined, 'FAST');
+  if (promoWidth > maxWidth) {
+    promoWidth = maxWidth;
+    promoHeight = promoWidth / ratio;
+  }
+  if (promoHeight < 100) {
+    localDoc.addPage();
+    endY = 50;
+    promoWidth = Math.min(maxWidth, 470);
+    promoHeight = promoWidth / ratio;
+  }
+  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, endY + 12, promoWidth, promoHeight, undefined, 'FAST');
 
   if (download) localDoc.save(`${sanitizeFileName((invoice.invoiceNumber || 'invoice') + '-' + (vendor.name || 'client'))}.pdf`);
   return localDoc;
-}
-
-function drawInvoiceHeader(doc, { treeLogo, pageWidth, margin, contentWidth, owner, address, email, companyName, phone, dateText, descriptionText }) {
-  const logoWidth = 100;
-  const logoHeight = 100;
-  let y = 18;
-  doc.addImage(treeLogo, 'PNG', pageWidth / 2 - logoWidth / 2, y, logoWidth, logoHeight, undefined, 'FAST');
-  y += 118;
-
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('times', 'bold');
-  doc.setFontSize(16);
-  doc.text(companyName, pageWidth / 2, y, { align: 'center' });
-  y += 22;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.text(phone, pageWidth / 2, y, { align: 'center' });
-  y += 30;
-
-  const rowHeight = 20;
-  const colWidths = [contentWidth * 0.27, contentWidth * 0.46, contentWidth * 0.27];
-  let x = margin;
-  doc.setDrawColor(40, 40, 40);
-  doc.setLineWidth(1);
-  [owner, address, email].forEach((cell, index) => {
-    const width = colWidths[index];
-    doc.rect(x, y, width, rowHeight);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text(String(cell || ''), x + 7, y + 13);
-    x += width;
-  });
-  y += rowHeight + 18;
-
-  doc.setTextColor(0, 104, 84);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  const dateX = pageWidth * 0.33;
-  const descX = pageWidth * 0.70;
-  const dateLines = doc.splitTextToSize(dateText, 170);
-  const descLines = doc.splitTextToSize(descriptionText, 280);
-  doc.text(dateLines, dateX, y, { align: 'center' });
-  doc.text(descLines.slice(0, 2), descX, y, { align: 'center' });
-  y += Math.max(dateLines.length, Math.min(descLines.length, 2)) * 13 + 2;
-  doc.setDrawColor(60, 60, 60);
-  doc.line(margin + 44, y, pageWidth - margin - 44, y);
-  y += 20;
-  return y;
-}
-
-function drawInvoiceContinuationHeader(doc, { pageWidth, margin, invoiceNumber, vendorName }) {
-  let y = 28;
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(`Invoice ${invoiceNumber || ''}${vendorName ? ` — ${vendorName}` : ''} (continued)`, margin, y);
-  y += 8;
-  doc.setDrawColor(70, 70, 70);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 18;
-  return y;
-}
-
-function estimateInvoiceRowHeight(doc, text, pageWidth, margin) {
-  const lines = doc.splitTextToSize(String(text || ''), pageWidth - margin - 120 - (margin + 52));
-  return Math.max(18, lines.length * 13 + 4);
-}
-
-function drawInvoiceItemRow(doc, item, index, { y, pageWidth, margin }) {
-  const numberX = margin + 18;
-  const descriptionX = margin + 46;
-  const amountX = pageWidth - margin - 14;
-  const descriptionWidth = amountX - descriptionX - 78;
-  const lines = doc.splitTextToSize(String(item.name || ''), descriptionWidth);
-  const rowHeight = Math.max(18, lines.length * 13 + 4);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.text(`${index + 1}.`, numberX, y + 10);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(lines, descriptionX, y + 10);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(money(item.amount), amountX, y + 10, { align: 'right' });
-
-  return y + rowHeight;
-}
-
-function formatInvoiceDisplayDate(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 }
 
 async function downloadFollowupPack(vendorId) {
