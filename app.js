@@ -1174,7 +1174,7 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
 
   const pageWidth = localDoc.internal.pageSize.getWidth();
   const pageHeight = localDoc.internal.pageSize.getHeight();
-  const margin = 26;
+  const margin = 24;
   const contentWidth = pageWidth - margin * 2;
 
   const treeLogo = await loadImageAsDataUrl('/assets/logo-tree.png');
@@ -1190,7 +1190,9 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
   const headerEmail = state.settings.companyEmail || 'RomanD.Landscaping@gmail.com';
   const headerOwner = state.settings.ownerName || 'Roman Cuateco';
   const displayDate = formatInvoiceDisplayDate(invoice.dateSent);
-  const descriptionText = `${invoice.description || 'Invoice'} ${invoice.property || vendor.property || ''}`.trim();
+  const descBase = String(invoice.description || '').trim();
+  const propertyBase = String(invoice.property || vendor.property || '').trim();
+  const descriptionText = descBase && propertyBase && descBase.toLowerCase().includes(propertyBase.toLowerCase()) ? descBase : [descBase || 'Invoice', propertyBase].filter(Boolean).join(' ');
 
   let y = drawInvoiceHeader(localDoc, {
     treeLogo,
@@ -1215,62 +1217,63 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
   for (let index = 0; index < bodyItems.length; index++) {
     const item = bodyItems[index];
     const rowHeight = estimateInvoiceRowHeight(localDoc, item.name, pageWidth, margin);
-    if (y + rowHeight > pageHeight - margin - 140) {
+    if (y + rowHeight > pageHeight - margin - 220) {
       localDoc.addPage();
       y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
     }
     y = drawInvoiceItemRow(localDoc, item, index, { y, pageWidth, margin });
   }
 
-  const totalsBlockHeight = state.settings.paymentNote ? 58 : 36;
-  if (y + totalsBlockHeight > pageHeight - margin - 180) {
+  const totalsBlockHeight = state.settings.paymentNote ? 72 : 48;
+  if (y + totalsBlockHeight > pageHeight - margin - 200) {
     localDoc.addPage();
     y = drawInvoiceContinuationHeader(localDoc, { pageWidth, margin, invoiceNumber: invoice.invoiceNumber, vendorName: vendor.name });
   }
 
-  y += 4;
+  y += 2;
   localDoc.setDrawColor(70, 70, 70);
   localDoc.setLineWidth(1);
   localDoc.line(margin + 44, y, pageWidth - margin - 44, y);
   y += 18;
 
   localDoc.setFont('times', 'bold');
-  localDoc.setFontSize(12);
+  localDoc.setFontSize(12.5);
   localDoc.text(`Total (${taxRate}% Tax applicable)`, pageWidth / 2, y, { align: 'center' });
   y += 18;
 
   localDoc.setFont('helvetica', 'normal');
   localDoc.setFontSize(10.5);
-  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin - 182, y);
-  localDoc.text(`Tax: ${money(tax)}`, pageWidth - margin - 90, y);
+  localDoc.text(`Subtotal: ${money(subtotal)}`, pageWidth - margin - 205, y);
+  localDoc.text(`Tax: ${money(tax)}`, pageWidth - margin - 108, y);
   localDoc.setFont('helvetica', 'bold');
   localDoc.text(`Total: ${money(total)}`, pageWidth - margin, y, { align: 'right' });
-  y += 16;
+  y += 20;
 
   if (state.settings.paymentNote) {
     localDoc.setTextColor(220, 30, 30);
     localDoc.setFont('helvetica', 'bold');
     localDoc.setFontSize(10);
-    localDoc.text(`!!! ${state.settings.paymentNote} !!!`, pageWidth / 2, y, { align: 'center', maxWidth: contentWidth - 50 });
+    const noteText = `!!! ${state.settings.paymentNote} !!!`;
+    localDoc.text(noteText, pageWidth / 2, y, { align: 'center', maxWidth: contentWidth - 60 });
     localDoc.setTextColor(0, 0, 0);
-    y += 20;
+    y += 24;
   }
 
   const promoProps = localDoc.getImageProperties(promo);
   const ratio = promoProps.width / promoProps.height;
-  const maxPromoWidth = Math.min(contentWidth - 84, 470);
+  const maxPromoWidth = Math.min(contentWidth - 96, 440);
   let promoWidth = maxPromoWidth;
   let promoHeight = promoWidth / ratio;
-  const availableHeight = pageHeight - y - margin;
+  let availableHeight = pageHeight - y - margin;
 
-  if (availableHeight < 190) {
+  if (availableHeight < 220) {
     localDoc.addPage();
-    y = 40;
+    y = 36;
+    availableHeight = pageHeight - y - margin;
   }
 
-  const finalAvailableHeight = pageHeight - y - margin;
-  if (promoHeight > finalAvailableHeight) {
-    promoHeight = Math.max(160, finalAvailableHeight);
+  if (promoHeight > availableHeight) {
+    promoHeight = availableHeight;
     promoWidth = promoHeight * ratio;
     if (promoWidth > maxPromoWidth) {
       promoWidth = maxPromoWidth;
@@ -1278,32 +1281,32 @@ async function generateInvoicePdf(invoice, { download = true, doc = null, addPag
     }
   }
 
-  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, y + 6, promoWidth, promoHeight, undefined, 'FAST');
+  localDoc.addImage(promo, 'PNG', pageWidth / 2 - promoWidth / 2, y + 4, promoWidth, promoHeight, undefined, 'FAST');
 
   if (download) localDoc.save(`${sanitizeFileName((invoice.invoiceNumber || 'invoice') + '-' + (vendor.name || 'client'))}.pdf`);
   return localDoc;
 }
 
 function drawInvoiceHeader(doc, { treeLogo, pageWidth, margin, contentWidth, owner, address, email, companyName, phone, dateText, descriptionText }) {
-  const logoWidth = 118;
-  const logoHeight = 83;
+  const logoWidth = 100;
+  const logoHeight = 100;
   let y = 18;
   doc.addImage(treeLogo, 'PNG', pageWidth / 2 - logoWidth / 2, y, logoWidth, logoHeight, undefined, 'FAST');
-  y += 100;
+  y += 118;
 
   doc.setTextColor(0, 0, 0);
   doc.setFont('times', 'bold');
-  doc.setFontSize(18);
+  doc.setFontSize(16);
   doc.text(companyName, pageWidth / 2, y, { align: 'center' });
-  y += 17;
+  y += 22;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(10.5);
   doc.text(phone, pageWidth / 2, y, { align: 'center' });
-  y += 28;
+  y += 30;
 
   const rowHeight = 20;
-  const colWidths = [contentWidth * 0.28, contentWidth * 0.44, contentWidth * 0.28];
+  const colWidths = [contentWidth * 0.27, contentWidth * 0.46, contentWidth * 0.27];
   let x = margin;
   doc.setDrawColor(40, 40, 40);
   doc.setLineWidth(1);
@@ -1311,22 +1314,22 @@ function drawInvoiceHeader(doc, { treeLogo, pageWidth, margin, contentWidth, own
     const width = colWidths[index];
     doc.rect(x, y, width, rowHeight);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.text(String(cell || ''), x + 8, y + 13);
+    doc.setFontSize(10);
+    doc.text(String(cell || ''), x + 7, y + 13);
     x += width;
   });
-  y += rowHeight + 20;
+  y += rowHeight + 18;
 
   doc.setTextColor(0, 104, 84);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12.5);
-  const dateCenter = margin + 155;
-  const descCenter = pageWidth - margin - 170;
+  doc.setFontSize(12);
+  const dateX = pageWidth * 0.33;
+  const descX = pageWidth * 0.70;
   const dateLines = doc.splitTextToSize(dateText, 170);
-  const descLines = doc.splitTextToSize(descriptionText, 300);
-  doc.text(dateLines, dateCenter, y, { align: 'center' });
-  doc.text(descLines.slice(0, 2), descCenter, y, { align: 'center' });
-  y += Math.max(dateLines.length, Math.min(descLines.length, 2)) * 13;
+  const descLines = doc.splitTextToSize(descriptionText, 280);
+  doc.text(dateLines, dateX, y, { align: 'center' });
+  doc.text(descLines.slice(0, 2), descX, y, { align: 'center' });
+  y += Math.max(dateLines.length, Math.min(descLines.length, 2)) * 13 + 2;
   doc.setDrawColor(60, 60, 60);
   doc.line(margin + 44, y, pageWidth - margin - 44, y);
   y += 20;
